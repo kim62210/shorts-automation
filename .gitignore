@@ -1,0 +1,8 @@
+__pycache__
+config.json
+.mp/
+venv/
+Songs/
+*.exe
+.DS_Store
+.openspec/
