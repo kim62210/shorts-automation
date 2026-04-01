@@ -140,3 +140,8 @@ def get_script_sentence_length() -> int:
     if config_json.get("script_sentence_length") is not None:
         return config_json["script_sentence_length"]
     return 4
+
+
+def get_pexels_api_key() -> str:
+    configured = _read_config().get("pexels_api_key", "")
+    return configured or os.environ.get("PEXELS_API_KEY", "")

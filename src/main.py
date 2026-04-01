@@ -16,6 +16,85 @@ from constants import YOUTUBE_OPTIONS, YOUTUBE_CRON_OPTIONS
 from classes.Tts import TTS
 from classes.YouTube import YouTube
 from llm_provider import list_models, select_model, get_active_model
+from genres import list_genres
+from effects import list_effects
+from subtitles import list_styles
+
+# 장르/효과/자막 모듈 자동 등록
+import genres.narration
+import genres.quiz
+import genres.quote
+import genres.story_text
+import genres.two_truths
+import genres.fortune
+import genres.countdown
+import genres.before_after
+import genres.would_you_rather
+import genres.step_tutorial
+import genres.what_if
+import genres.wait_for_it
+import genres.spot_difference
+import effects.slideshow
+import effects.ken_burns
+import effects.fade_transition
+import effects.broll
+import subtitles.classic
+import subtitles.modern_box
+import subtitles.bold_center
+import subtitles.highlight_word
+import subtitles.minimal_bottom
+
+
+def select_genre() -> tuple:
+    """장르 선택 메뉴. (genre_name, effect_override, subtitle_override) 반환."""
+    genres = list_genres()
+
+    info("\n========== CONTENT GENRES =========", False)
+    for idx, genre_cls in enumerate(genres):
+        label = genre_cls.display_name
+        print(colored(f" {idx + 1}. {label}", "cyan"))
+    info("===================================\n", False)
+
+    genre_input = int(question("Select a genre: ")) - 1
+    if genre_input < 0 or genre_input >= len(genres):
+        warning("Invalid selection. Using default (narration).")
+        return "narration", None, None
+
+    selected = genres[genre_input]
+    genre_name = selected.name
+
+    effect_override = None
+    subtitle_override = None
+
+    customize = question("Customize effect/subtitle? (y/N): ").strip().lower()
+    if customize == "y":
+        effects_list = list_effects()
+        if effects_list and selected.default_effect:
+            info(f"\n  Current effect: {selected.default_effect}", False)
+            info("  Available effects:", False)
+            for idx, eff_cls in enumerate(effects_list):
+                print(colored(f"   {idx + 1}. {eff_cls.display_name}", "cyan"))
+            print(colored(f"   0. Keep default", "cyan"))
+            eff_input = question("  Select effect (0=default): ").strip()
+            if eff_input and eff_input != "0":
+                eff_idx = int(eff_input) - 1
+                if 0 <= eff_idx < len(effects_list):
+                    effect_override = effects_list[eff_idx].name
+
+        styles_list = list_styles()
+        if styles_list:
+            info(f"\n  Current subtitle: {selected.default_subtitle_style}", False)
+            info("  Available styles:", False)
+            for idx, sty_cls in enumerate(styles_list):
+                print(colored(f"   {idx + 1}. {sty_cls.display_name}", "cyan"))
+            print(colored(f"   0. Keep default", "cyan"))
+            sty_input = question("  Select style (0=default): ").strip()
+            if sty_input and sty_input != "0":
+                sty_idx = int(sty_input) - 1
+                if 0 <= sty_idx < len(styles_list):
+                    subtitle_override = styles_list[sty_idx].name
+
+    return genre_name, effect_override, subtitle_override
 
 
 def main():
@@ -128,7 +207,13 @@ def main():
                 tts = TTS()
 
                 if user_input == 1:
-                    video_path = youtube.generate_video(tts)
+                    genre_name, eff_override, sub_override = select_genre()
+                    video_path = youtube.generate_video(
+                        tts,
+                        genre_name=genre_name,
+                        effect_override=eff_override,
+                        subtitle_override=sub_override,
+                    )
                     success(f"Local video generated: {os.path.abspath(video_path)}")
                 elif user_input == 2:
                     videos = youtube.get_videos()

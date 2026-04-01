@@ -23,5 +23,6 @@
   "tts_voice": "Jasper",
   "font": "bold_font.ttf",
   "imagemagick_path": "",
-  "script_sentence_length": 4
+  "script_sentence_length": 4,
+  "pexels_api_key": ""
 }
