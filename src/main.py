@@ -235,6 +235,8 @@ def main():
                     else:
                         warning(" No videos found.")
                 elif user_input == 3:
+                    info("Select genre for scheduled generation:")
+                    cron_genre, _, _ = select_genre()
                     info("How often do you want to generate a local video?")
 
                     info("\n============ OPTIONS ============", False)
@@ -246,11 +248,13 @@ def main():
                     user_input = int(question("Select an Option: "))
 
                     cron_script_path = os.path.join(ROOT_DIR, "src", "cron.py")
+                    active_model = get_active_model() or ""
                     command = [
                         "python",
                         cron_script_path,
                         selected_account["id"],
-                        get_active_model(),
+                        active_model,
+                        cron_genre,
                     ]
 
                     def job():

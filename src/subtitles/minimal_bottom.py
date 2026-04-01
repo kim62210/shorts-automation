@@ -17,7 +17,7 @@ class MinimalBottomStyle(BaseSubtitleStyle):
             text=text,
             font=os.path.join(get_fonts_dir(), get_font()),
             font_size=55,
-            color="rgba(255,255,255,230)",
+            color="#FFFFFF",
             size=(video_size[0], None),
             method="caption",
         )

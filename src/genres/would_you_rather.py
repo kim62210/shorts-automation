@@ -3,13 +3,12 @@ import os
 from typing import List, Optional
 from uuid import uuid4
 
-import numpy as np
 from PIL import Image
 
 from genres import register_genre
 from genres.base import BaseGenre
-from config import ROOT_DIR, get_verbose, get_threads, equalize_subtitles
-from status import success, warning
+from config import ROOT_DIR
+from status import success
 from moviepy import (
     AudioFileClip,
     ImageClip,
@@ -65,7 +64,6 @@ Make image prompts detailed and vivid for AI image generation.
     def compose_video(self, tts_path: str, content: dict,
                       images: Optional[List[str]] = None) -> str:
         combined_path = os.path.join(ROOT_DIR, ".mp", str(uuid4()) + ".mp4")
-        threads = get_threads()
 
         tts_clip = AudioFileClip(tts_path)
         max_duration = tts_clip.duration
@@ -179,23 +177,4 @@ Make image prompts detailed and vivid for AI image generation.
             size=video_size,
         ).with_duration(max_duration).with_fps(30)
 
-        # 자막
-        subtitle_style = self._get_subtitle_style()
-        subtitles = None
-        try:
-            srt_path = self.generate_subtitles(tts_path)
-            equalize_subtitles(srt_path, 10)
-            subtitles = subtitle_style.render_subtitles(srt_path, video_size)
-        except Exception as e:
-            warning(f"Failed to generate subtitles, continuing without: {e}")
-
-        comp_audio = self.mix_audio(tts_path)
-        video_clip = video_clip.with_audio(comp_audio)
-
-        if subtitles is not None:
-            video_clip = CompositeVideoClip([video_clip, subtitles])
-
-        video_clip.write_videofile(combined_path, threads=threads)
-        success(f'Wrote Video to "{combined_path}"')
-
-        return combined_path
+        return self._finalize_video(video_clip, tts_path, combined_path)

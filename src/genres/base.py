@@ -78,10 +78,19 @@ class BaseGenre(ABC):
     def generate_response(self, prompt: str) -> str:
         return generate_text(prompt)
 
-    def generate_response_json(self, prompt: str) -> dict:
+    def generate_response_json(self, prompt: str, _retry_count: int = 0) -> dict:
         raw = self.generate_response(prompt)
         cleaned = raw.replace("```json", "").replace("```", "").strip()
-        return json.loads(cleaned)
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError as exc:
+            if _retry_count >= 2:
+                raise RuntimeError(
+                    f"LLM returned invalid JSON after {_retry_count + 1} attempts"
+                ) from exc
+            if get_verbose():
+                warning(f"JSON parse failed (attempt {_retry_count + 1}), retrying...")
+            return self.generate_response_json(prompt, _retry_count=_retry_count + 1)
 
     # ── Image Generation ─────────────────────────────
 
@@ -283,6 +292,43 @@ class BaseGenre(ABC):
         frame_path = os.path.join(ROOT_DIR, ".mp", str(uuid4()) + ".png")
         img.save(frame_path)
         return frame_path
+
+    # ── Finalize Video ────────────────────────────────
+
+    def _finalize_video(self, video_clip, tts_path: str, combined_path: str,
+                        video_size: tuple = (1080, 1920)) -> str:
+        """자막 합성 + 오디오 믹싱 + 파일 쓰기 공통 로직."""
+        tts_clip = AudioFileClip(tts_path)
+
+        # 자막
+        subtitle_style = self._get_subtitle_style()
+        subtitles = None
+        try:
+            if self._subtitle_name == "highlight_word" and hasattr(subtitle_style, "render_word_level"):
+                words = self.generate_word_level_subtitles(tts_path)
+                if words:
+                    subtitles = subtitle_style.render_word_level(words, video_size, tts_clip.duration)
+            if subtitles is None:
+                srt_path = self.generate_subtitles(tts_path)
+                equalize_subtitles(srt_path, 10)
+                subtitles = subtitle_style.render_subtitles(srt_path, video_size)
+        except Exception as e:
+            warning(f"Failed to generate subtitles, continuing without: {e}")
+
+        # 오디오
+        comp_audio = self.mix_audio(tts_path)
+        video_clip = video_clip.with_audio(comp_audio)
+        video_clip = video_clip.with_duration(tts_clip.duration)
+
+        # 자막 합성
+        if subtitles is not None:
+            video_clip = CompositeVideoClip([video_clip, subtitles])
+
+        # 파일 쓰기
+        video_clip.write_videofile(combined_path, threads=get_threads())
+        success(f'Wrote Video to "{combined_path}"')
+
+        return combined_path
 
     # ── Audio Mixing ─────────────────────────────────
 

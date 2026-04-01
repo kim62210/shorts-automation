@@ -4,7 +4,6 @@ import json
 
 from typing import List, Optional
 from uuid import uuid4
-from termcolor import colored
 
 from genres import register_genre
 from genres.base import BaseGenre
@@ -12,15 +11,11 @@ from config import (
     ROOT_DIR,
     get_verbose,
     get_script_sentence_length,
-    get_threads,
-    equalize_subtitles,
 )
 from status import error, success, info, warning
 from moviepy import (
     AudioFileClip,
     ImageClip,
-    CompositeVideoClip,
-    CompositeAudioClip,
 )
 
 
@@ -32,7 +27,7 @@ class NarrationGenre(BaseGenre):
     default_subtitle_style = "classic"
     needs_images = True
 
-    def generate_content(self) -> dict:
+    def generate_content(self, _retry_count: int = 0) -> dict:
         topic = self.generate_response(
             f"Please generate a specific video idea that takes about the following topic: {self.niche}. Make it exactly one sentence. Only return the topic, nothing else."
         )
@@ -67,9 +62,11 @@ class NarrationGenre(BaseGenre):
         if not script:
             error("The generated script is empty.")
         if len(script) > 5000:
+            if _retry_count >= 3:
+                raise RuntimeError("Max retries exceeded for content generation")
             if get_verbose():
                 warning("Generated Script is too long. Retrying...")
-            return self.generate_content()
+            return self.generate_content(_retry_count=_retry_count + 1)
 
         title = self.generate_response(
             f"Please generate a YouTube Video Title for the following subject, including hashtags: {topic}. Only return the title, nothing else. Limit the title under 100 characters."
@@ -117,15 +114,17 @@ class NarrationGenre(BaseGenre):
                 image_prompts = parsed["image_prompts"]
             else:
                 image_prompts = parsed
-        except Exception:
+        except json.JSONDecodeError as e:
             r = re.compile(r"\[.*\]", re.DOTALL)
             matches = r.findall(prompts_raw)
             if matches:
                 image_prompts = json.loads(matches[0])
             else:
+                if _retry_count >= 3:
+                    raise RuntimeError("Max retries exceeded for content generation") from e
                 if get_verbose():
                     warning("Failed to parse image prompts. Retrying...")
-                return self.generate_content()
+                return self.generate_content(_retry_count=_retry_count + 1)
 
         if len(image_prompts) > n_prompts:
             image_prompts = image_prompts[:n_prompts]
@@ -143,7 +142,6 @@ class NarrationGenre(BaseGenre):
     def compose_video(self, tts_path: str, content: dict,
                       images: Optional[List[str]] = None) -> str:
         combined_path = os.path.join(ROOT_DIR, ".mp", str(uuid4()) + ".mp4")
-        threads = get_threads()
 
         tts_clip = AudioFileClip(tts_path)
         max_duration = tts_clip.duration
@@ -156,24 +154,4 @@ class NarrationGenre(BaseGenre):
 
         video_clip = video_clip.with_fps(30)
 
-        subtitle_style = self._get_subtitle_style()
-        subtitles = None
-        try:
-            srt_path = self.generate_subtitles(tts_path)
-            equalize_subtitles(srt_path, 10)
-            subtitles = subtitle_style.render_subtitles(srt_path, (1080, 1920))
-        except Exception as e:
-            warning(f"Failed to generate subtitles, continuing without: {e}")
-
-        comp_audio = self.mix_audio(tts_path)
-
-        video_clip = video_clip.with_audio(comp_audio)
-        video_clip = video_clip.with_duration(tts_clip.duration)
-
-        if subtitles is not None:
-            video_clip = CompositeVideoClip([video_clip, subtitles])
-
-        video_clip.write_videofile(combined_path, threads=threads)
-        success(f'Wrote Video to "{combined_path}"')
-
-        return combined_path
+        return self._finalize_video(video_clip, tts_path, combined_path)

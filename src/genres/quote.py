@@ -5,12 +5,10 @@ from uuid import uuid4
 
 from genres import register_genre
 from genres.base import BaseGenre
-from config import ROOT_DIR, get_threads, get_verbose, equalize_subtitles
-from status import warning
+from config import ROOT_DIR
 from moviepy import (
     ImageClip,
     AudioFileClip,
-    CompositeVideoClip,
 )
 
 
@@ -41,7 +39,6 @@ Requirements:
     def compose_video(self, tts_path: str, content: dict,
                       images: Optional[List[str]] = None) -> str:
         combined_path = os.path.join(ROOT_DIR, ".mp", str(uuid4()) + ".mp4")
-        threads = get_threads()
 
         tts_clip = AudioFileClip(tts_path)
         total_duration = tts_clip.duration
@@ -59,23 +56,4 @@ Requirements:
 
         video = ImageClip(frame).with_duration(total_duration).with_fps(30)
 
-        # 자막
-        subtitle_style = self._get_subtitle_style()
-        subtitles = None
-        try:
-            srt_path = self.generate_subtitles(tts_path)
-            equalize_subtitles(srt_path, 10)
-            subtitles = subtitle_style.render_subtitles(srt_path, (1080, 1920))
-        except Exception as e:
-            warning(f"Failed to generate subtitles, continuing without: {e}")
-
-        # 오디오 합성
-        comp_audio = self.mix_audio(tts_path)
-        video = video.with_audio(comp_audio)
-        video = video.with_duration(total_duration)
-
-        if subtitles is not None:
-            video = CompositeVideoClip([video, subtitles])
-
-        video.write_videofile(combined_path, threads=threads)
-        return combined_path
+        return self._finalize_video(video, tts_path, combined_path)

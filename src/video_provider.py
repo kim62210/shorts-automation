@@ -1,20 +1,15 @@
 import logging
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import requests
 
+from config import get_pexels_api_key
 from status import info, warning
 
 logger = logging.getLogger(__name__)
 
 PEXELS_API_BASE = "https://api.pexels.com"
-
-
-def _get_pexels_api_key() -> str:
-    """Pexels API 키를 환경변수에서 읽기"""
-    return os.environ.get("PEXELS_API_KEY", "")
 
 
 def search_videos(
@@ -36,9 +31,9 @@ def search_videos(
     Returns:
         비디오 정보 딕셔너리 리스트
     """
-    api_key = _get_pexels_api_key()
+    api_key = get_pexels_api_key()
     if not api_key:
-        warning("PEXELS_API_KEY 환경변수가 설정되지 않았습니다")
+        warning("Pexels API 키가 설정되지 않았습니다 (config.json 또는 환경변수 확인)")
         return []
 
     headers = {"Authorization": api_key}

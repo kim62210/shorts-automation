@@ -3,7 +3,7 @@ from typing import TypedDict
 
 from moviepy import CompositeVideoClip, TextClip, VideoClip
 
-from config import get_fonts_dir
+from config import get_font, get_fonts_dir
 from subtitles import register_style
 from subtitles.base import BaseSubtitleStyle
 
@@ -21,7 +21,7 @@ class HighlightWordStyle(BaseSubtitleStyle):
 
     def make_textclip(self, text: str, video_size: tuple) -> TextClip:
         """SRT 기반 폴백 -- bold_center와 동일하게 동작"""
-        font_path = os.path.join(get_fonts_dir(), "bold_font.ttf")
+        font_path = os.path.join(get_fonts_dir(), get_font())
         return TextClip(
             text=text,
             font=font_path,
@@ -44,7 +44,7 @@ class HighlightWordStyle(BaseSubtitleStyle):
         현재 시간대의 단어는 노란색(#FFFF00), 나머지는 흰색(#FFFFFF)으로 표시.
         각 단어 구간마다 전체 문장을 흰색으로 깔고, 현재 단어만 노란색으로 덮어쓴다.
         """
-        font_path = os.path.join(get_fonts_dir(), "bold_font.ttf")
+        font_path = os.path.join(get_fonts_dir(), get_font())
         all_words = [w["word"] for w in words_data]
         full_text = " ".join(all_words)
 

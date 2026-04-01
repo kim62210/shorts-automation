@@ -13,7 +13,7 @@ class BoldCenterStyle(BaseSubtitleStyle):
     display_name = "Bold Center"
 
     def make_textclip(self, text: str, video_size: tuple) -> TextClip:
-        font_path = os.path.join(get_fonts_dir(), "bold_font.ttf")
+        font_path = os.path.join(get_fonts_dir(), get_font())
         return TextClip(
             text=text,
             font=font_path,

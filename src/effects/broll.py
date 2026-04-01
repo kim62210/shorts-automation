@@ -78,6 +78,11 @@ class BRollEffect(BaseEffect):
 
     def apply(self, image_paths: List[str], duration: float,
               video_size: tuple = (1080, 1920)) -> VideoClip:
+        """로컬 이미지/비디오 파일을 이어 붙여 B-Roll 클립 생성.
+
+        호출자가 video_provider로 비디오를 다운로드한 후 경로를 전달해야 함.
+        이 메서드는 이미 로컬에 존재하는 파일만 처리한다.
+        """
         req_dur = duration / len(image_paths)
 
         clips = []
