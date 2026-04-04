@@ -13,13 +13,14 @@ class ClassicStyle(BaseSubtitleStyle):
     display_name = "Classic"
 
     def make_textclip(self, text: str, video_size: tuple) -> TextClip:
+        from subtitles.base import SUBTITLE_SAFE_WIDTH
         return TextClip(
             text=text,
             font=os.path.join(get_fonts_dir(), get_font()),
-            font_size=100,
+            font_size=80,
             color="#FFFF00",
             stroke_color="black",
             stroke_width=5,
-            size=video_size,
+            size=(SUBTITLE_SAFE_WIDTH, None),
             method="caption",
         )
