@@ -47,6 +47,29 @@ class BaseGenre(ABC):
     default_subtitle_style: str = "classic"
     needs_images: bool = True
 
+    # YouTube Shorts safe zone (based on 1080x1920)
+    SAFE_TOP = 270
+    SAFE_BOTTOM = 400     # bottom margin (buttons/channel info)
+    SAFE_LEFT = 60
+    SAFE_RIGHT = 190      # right margin (like/comment buttons)
+
+    # PawPick cute animal image style suffix
+    IMAGE_STYLE_SUFFIX = (
+        ", adorable cute animal character, photorealistic 3D render, "
+        "oversized sparkling eyes, Pixar-quality kawaii expression, "
+        "soft pastel colors, cinematic lighting, hyperrealistic fur texture, "
+        "9:16 vertical composition, 4K quality"
+    )
+
+    # CTA texts (PawPick)
+    CTA_TEXTS = [
+        "Like if accurate! 👍",
+        "Comment your answer! 💬",
+        "Follow for more! 🐾",
+    ]
+    CTA_COLORS = ["#FFFF00", "#FFFFFF", "#C4B5FD"]
+    CTA_FONT_SIZES = [48, 40, 36]
+
     def __init__(self, niche: str, language: str,
                  effect_override: Optional[str] = None,
                  subtitle_override: Optional[str] = None):
@@ -100,13 +123,16 @@ class BaseGenre(ABC):
             error("nanobanana2_api_key is not configured.")
             return None
 
+        # PawPick cute animal style auto-applied
+        styled_prompt = prompt + self.IMAGE_STYLE_SUFFIX
+
         base_url = get_nanobanana2_api_base_url().rstrip("/")
         model = get_nanobanana2_model()
         aspect_ratio = get_nanobanana2_aspect_ratio()
 
         endpoint = f"{base_url}/models/{model}:generateContent"
         payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
+            "contents": [{"parts": [{"text": styled_prompt}]}],
             "generationConfig": {
                 "responseModalities": ["IMAGE"],
                 "imageConfig": {"aspectRatio": aspect_ratio},
@@ -241,6 +267,71 @@ class BaseGenre(ABC):
         millis = total_millis % 1000
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
 
+    # ── Text Wrapping Helper ─────────────────────────
+
+    @staticmethod
+    def _wrap_text(text: str, font, max_width: int, draw: ImageDraw.ImageDraw) -> list:
+        """Wrap text to fit within max_width."""
+        if not text.strip():
+            return [text]
+        words = text.split()
+        if not words:
+            return [text]
+        lines = []
+        current_line = words[0]
+        for word in words[1:]:
+            test = f"{current_line} {word}"
+            bbox = draw.textbbox((0, 0), test, font=font)
+            if (bbox[2] - bbox[0]) <= max_width:
+                current_line = test
+            else:
+                lines.append(current_line)
+                current_line = word
+        lines.append(current_line)
+        return lines
+
+    def _draw_texts_in_safe_zone(self, draw: ImageDraw.ImageDraw, texts: list,
+                                  colors: list, font_sizes: list,
+                                  size: tuple = (1080, 1920)) -> None:
+        """Center-align text within the safe zone with auto line wrapping."""
+        font_path = os.path.join(get_fonts_dir(), get_font())
+        safe_x1 = self.SAFE_LEFT
+        safe_x2 = size[0] - self.SAFE_RIGHT
+        safe_y1 = self.SAFE_TOP
+        safe_y2 = size[1] - self.SAFE_BOTTOM
+        safe_w = safe_x2 - safe_x1
+        safe_h = safe_y2 - safe_y1
+        safe_cx = (safe_x1 + safe_x2) // 2
+        line_spacing = 16
+
+        # Step 1: Wrap all texts and calculate total height
+        all_rendered = []  # [(wrapped_lines, font, color, fsize)]
+        total_height = 0
+        for text, color, fsize in zip(texts, colors, font_sizes):
+            try:
+                font = ImageFont.truetype(font_path, fsize)
+            except (OSError, IOError):
+                font = ImageFont.load_default()
+            wrapped = self._wrap_text(text, font, safe_w, draw)
+            block_h = len(wrapped) * (fsize + line_spacing)
+            all_rendered.append((wrapped, font, color, fsize))
+            total_height += block_h
+
+        # Step 2: Start from vertical center of the safe zone
+        y = safe_y1 + max(0, (safe_h - total_height) // 2)
+
+        # Step 3: Draw
+        for wrapped, font, color, fsize in all_rendered:
+            for line in wrapped:
+                bbox = draw.textbbox((0, 0), line, font=font)
+                tw = bbox[2] - bbox[0]
+                x = safe_cx - tw // 2
+                # Clamp to stay within the safe zone
+                x = max(safe_x1, min(x, safe_x2 - tw))
+                if y + fsize <= safe_y2:
+                    draw.text((x, y), line, fill=color, font=font)
+                y += fsize + line_spacing
+
     # ── Text Frame Generation (Pillow) ───────────────
 
     def generate_text_frame(self, texts: list, colors: list = None,
@@ -250,28 +341,141 @@ class BaseGenre(ABC):
         img = Image.new("RGB", size, bg_color)
         draw = ImageDraw.Draw(img)
 
-        font_path = os.path.join(get_fonts_dir(), get_font())
         if colors is None:
             colors = ["#FFFFFF"] * len(texts)
         if font_sizes is None:
             font_sizes = [60] * len(texts)
 
-        y_offset = size[1] // 2 - (len(texts) * 80) // 2
-        for text, color, fsize in zip(texts, colors, font_sizes):
-            try:
-                font = ImageFont.truetype(font_path, fsize)
-            except (OSError, IOError):
-                font = ImageFont.load_default()
-
-            bbox = draw.textbbox((0, 0), text, font=font)
-            text_width = bbox[2] - bbox[0]
-            x = (size[0] - text_width) // 2
-            draw.text((x, y_offset), text, fill=color, font=font)
-            y_offset += fsize + 20
+        self._draw_texts_in_safe_zone(draw, texts, colors, font_sizes, size)
 
         frame_path = os.path.join(ROOT_DIR, ".mp", str(uuid4()) + ".png")
         img.save(frame_path)
         return frame_path
+
+    def generate_text_on_image_frame(self, image_path: str, texts: list,
+                                        colors: list = None,
+                                        size: tuple = (1080, 1920),
+                                        font_sizes: list = None,
+                                        darken: float = 0.45) -> str:
+        """Darken AI image with semi-transparent overlay, then add text."""
+        bg = Image.open(image_path).convert("RGB")
+        bg = bg.resize(size, Image.LANCZOS)
+
+        overlay = Image.new("RGBA", size, (0, 0, 0, int(255 * darken)))
+        bg = bg.convert("RGBA")
+        bg = Image.alpha_composite(bg, overlay)
+        bg = bg.convert("RGB")
+
+        draw = ImageDraw.Draw(bg)
+        if colors is None:
+            colors = ["#FFFFFF"] * len(texts)
+        if font_sizes is None:
+            font_sizes = [60] * len(texts)
+
+        self._draw_texts_in_safe_zone(draw, texts, colors, font_sizes, size)
+
+        frame_path = os.path.join(ROOT_DIR, ".mp", str(uuid4()) + ".png")
+        bg.save(frame_path)
+        return frame_path
+
+    def generate_3tier_image_frame(self, image_path: str,
+                                    top_texts: list = None, top_colors: list = None,
+                                    top_font_sizes: list = None,
+                                    bottom_texts: list = None, bottom_colors: list = None,
+                                    bottom_font_sizes: list = None,
+                                    size: tuple = (1080, 1920),
+                                    darken: float = 0.35) -> str:
+        """PawPick 3-tier layout: top 20% question, center 60% image, bottom 20% CTA/info."""
+        bg = Image.open(image_path).convert("RGB")
+        bg = bg.resize(size, Image.LANCZOS)
+
+        # Darken only top/bottom zones (keep center image area bright)
+        overlay = Image.new("RGBA", size, (0, 0, 0, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        top_zone = int(size[1] * 0.25)
+        bottom_zone = int(size[1] * 0.75)
+        # Top gradient
+        for y in range(top_zone):
+            alpha = int(180 * (1 - y / top_zone))
+            overlay_draw.line([(0, y), (size[0], y)], fill=(0, 0, 0, alpha))
+        # Bottom gradient
+        for y in range(bottom_zone, size[1]):
+            alpha = int(180 * ((y - bottom_zone) / (size[1] - bottom_zone)))
+            overlay_draw.line([(0, y), (size[0], y)], fill=(0, 0, 0, alpha))
+
+        bg = bg.convert("RGBA")
+        bg = Image.alpha_composite(bg, overlay)
+        bg = bg.convert("RGB")
+
+        draw = ImageDraw.Draw(bg)
+        font_path = os.path.join(get_fonts_dir(), get_font())
+        safe_x1 = self.SAFE_LEFT
+        safe_x2 = size[0] - self.SAFE_RIGHT
+        safe_w = safe_x2 - safe_x1
+        safe_cx = (safe_x1 + safe_x2) // 2
+        line_sp = 14
+
+        def _draw_block(texts, colors, font_sizes, y_start, y_end, valign="center"):
+            if not texts:
+                return
+            rendered = []
+            total_h = 0
+            for t, c, fs in zip(texts, colors, font_sizes):
+                try:
+                    f = ImageFont.truetype(font_path, fs)
+                except (OSError, IOError):
+                    f = ImageFont.load_default()
+                wrapped = self._wrap_text(t, f, safe_w, draw)
+                block_h = len(wrapped) * (fs + line_sp)
+                rendered.append((wrapped, f, c, fs))
+                total_h += block_h
+
+            if valign == "top":
+                y = y_start + 10
+            elif valign == "bottom":
+                y = max(y_start, y_end - total_h - 10)
+            else:
+                y = y_start + max(0, (y_end - y_start - total_h) // 2)
+
+            for wrapped, f, c, fs in rendered:
+                for line in wrapped:
+                    bbox = draw.textbbox((0, 0), line, font=f)
+                    tw = bbox[2] - bbox[0]
+                    x = safe_cx - tw // 2
+                    x = max(safe_x1, min(x, safe_x2 - tw))
+                    if y + fs <= size[1]:
+                        draw.text((x, y), line, fill=c, font=f)
+                    y += fs + line_sp
+
+        # Top zone (safe zone top ~ 25%)
+        if top_texts:
+            _draw_block(top_texts, top_colors or ["#FFFFFF"] * len(top_texts),
+                       top_font_sizes or [52] * len(top_texts),
+                       self.SAFE_TOP, int(size[1] * 0.25), valign="center")
+
+        # Bottom zone (75% ~ safe zone bottom)
+        if bottom_texts:
+            _draw_block(bottom_texts, bottom_colors or ["#FFFFFF"] * len(bottom_texts),
+                       bottom_font_sizes or [40] * len(bottom_texts),
+                       int(size[1] * 0.75), size[1] - self.SAFE_BOTTOM, valign="center")
+
+        frame_path = os.path.join(ROOT_DIR, ".mp", str(uuid4()) + ".png")
+        bg.save(frame_path)
+        return frame_path
+
+    def generate_cta_frame(self, bg_image_path: str = None,
+                           size: tuple = (1080, 1920)) -> str:
+        """Generate CTA (call-to-action) frame."""
+        if bg_image_path:
+            return self.generate_text_on_image_frame(
+                bg_image_path, texts=self.CTA_TEXTS,
+                colors=self.CTA_COLORS, font_sizes=self.CTA_FONT_SIZES,
+                darken=0.55,
+            )
+        return self.generate_text_frame(
+            texts=self.CTA_TEXTS, colors=self.CTA_COLORS,
+            bg_color="#0a0a2e", font_sizes=self.CTA_FONT_SIZES,
+        )
 
     def generate_gradient_frame(self, color_top: str = "#0a0a1a",
                                 color_bottom: str = "#1a1a3e",
@@ -297,10 +501,10 @@ class BaseGenre(ABC):
 
     def _finalize_video(self, video_clip, tts_path: str, combined_path: str,
                         video_size: tuple = (1080, 1920)) -> str:
-        """자막 합성 + 오디오 믹싱 + 파일 쓰기 공통 로직."""
+        """Common logic for subtitle compositing + audio mixing + file writing."""
         tts_clip = AudioFileClip(tts_path)
 
-        # 자막
+        # Subtitles
         subtitle_style = self._get_subtitle_style()
         subtitles = None
         try:
@@ -315,16 +519,16 @@ class BaseGenre(ABC):
         except Exception as e:
             warning(f"Failed to generate subtitles, continuing without: {e}")
 
-        # 오디오
+        # Audio
         comp_audio = self.mix_audio(tts_path)
         video_clip = video_clip.with_audio(comp_audio)
         video_clip = video_clip.with_duration(tts_clip.duration)
 
-        # 자막 합성
+        # Subtitle compositing
         if subtitles is not None:
             video_clip = CompositeVideoClip([video_clip, subtitles])
 
-        # 파일 쓰기
+        # Write file
         video_clip.write_videofile(combined_path, threads=get_threads())
         success(f'Wrote Video to "{combined_path}"')
 
