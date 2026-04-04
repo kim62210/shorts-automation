@@ -12,6 +12,7 @@ from moviepy import (
     ImageClip,
     TextClip,
     CompositeVideoClip,
+    concatenate_videoclips,
 )
 from moviepy.video.fx.CrossFadeIn import CrossFadeIn
 
@@ -19,28 +20,34 @@ from moviepy.video.fx.CrossFadeIn import CrossFadeIn
 @register_genre
 class BeforeAfterGenre(BaseGenre):
     name = "before_after"
-    display_name = "Before / After"
+    display_name = "Animal Growth"
     default_effect = "fade_transition"
     default_subtitle_style = "classic"
     needs_images = True
 
     def generate_content(self) -> dict:
-        prompt = f"""Generate a "Before and After" comparison video script about the topic: {self.niche}.
+        prompt = f"""Generate a cute animal growth/transformation video script about the topic: {self.niche}.
+
+IMPORTANT: The content MUST be about animals. This is for a YouTube channel called "PawPick" that creates adorable animal content.
+The subject must be an animal showing a dramatic transformation, such as:
+- Baby animal to adult animal (e.g., kitten to cat, chick to chicken)
+- Seasonal coat changes (e.g., summer coat to winter coat arctic fox)
+- Life stage transformations (e.g., tadpole to frog, caterpillar to butterfly)
 
 Return ONLY valid JSON in this exact format:
 {{
-  "subject": "The subject of the comparison",
-  "before_description": "Description of the before state",
-  "after_description": "Description of the after state",
-  "before_prompt": "Detailed AI image generation prompt for the before state",
-  "after_prompt": "Detailed AI image generation prompt for the after state",
-  "script": "Full narration script comparing before and after states",
-  "image_prompts": ["before image prompt", "after image prompt"]
+  "subject": "The animal subject of the transformation",
+  "before_description": "Description of the baby/young/before state of the animal",
+  "after_description": "Description of the adult/grown/after state of the animal",
+  "before_prompt": "Detailed AI image generation prompt for the adorable baby/young animal",
+  "after_prompt": "Detailed AI image generation prompt for the majestic adult/transformed animal",
+  "script": "Full narration script comparing the cute baby animal to its impressive adult form",
+  "image_prompts": ["baby/young animal image prompt", "adult/transformed animal image prompt"]
 }}
 
 The script must be narrated in {self.language}.
-Make image prompts detailed and vivid for AI image generation.
-The before and after should show a dramatic transformation.
+Make image prompts detailed and vivid, emphasizing the adorable baby animal and the majestic adult animal for AI image generation.
+The before and after should show a dramatic and heartwarming animal transformation.
 """
         content = self.generate_response_json(prompt)
         success(f"Generated before/after content: {content.get('subject', '')}")
@@ -57,7 +64,7 @@ The before and after should show a dramatic transformation.
 
         video_size = (1080, 1920)
 
-        # BEFORE 클립
+        # BEFORE clip
         if images and len(images) >= 1:
             before_clip = (
                 ImageClip(images[0])
@@ -92,7 +99,7 @@ The before and after should show a dramatic transformation.
             [before_clip, before_label], size=video_size
         ).with_duration(half_duration)
 
-        # AFTER 클립
+        # AFTER clip
         if images and len(images) >= 2:
             after_clip = (
                 ImageClip(images[1])
@@ -127,13 +134,19 @@ The before and after should show a dramatic transformation.
             [after_clip, after_label], size=video_size
         ).with_duration(half_duration)
 
-        # CrossFadeIn 전환 효과 적용
+        # Apply CrossFadeIn transition effect
         after_comp = after_comp.with_effects([CrossFadeIn(transition_duration)])
 
-        # BEFORE → 전환 → AFTER
+        # BEFORE -> transition -> AFTER
         after_comp = after_comp.with_start(half_duration - transition_duration)
         video_clip = CompositeVideoClip(
             [before_comp, after_comp], size=video_size
         ).with_duration(max_duration).with_fps(30)
+
+        # Add CTA frame
+        cta_img = images[-1] if images else None
+        cta_frame = self.generate_cta_frame(cta_img)
+        cta_clip = ImageClip(cta_frame).with_duration(3.0).with_fps(30)
+        video_clip = concatenate_videoclips([video_clip, cta_clip])
 
         return self._finalize_video(video_clip, tts_path, combined_path)

@@ -14,45 +14,50 @@ from moviepy import (
     ImageClip,
     TextClip,
     CompositeVideoClip,
+    concatenate_videoclips,
 )
 
 
 @register_genre
 class WouldYouRatherGenre(BaseGenre):
     name = "would_you_rather"
-    display_name = "이것 vs 저것"
+    display_name = "Animal VS Battle"
     default_effect = None
     default_subtitle_style = "bold_center"
     needs_images = True
 
     def generate_content(self) -> dict:
-        prompt = f"""Generate a "Would You Rather" / "This vs That" video script about the topic: {self.niche}.
+        prompt = f"""Generate a cute "Animal VS Battle" video script about the topic: {self.niche}.
+
+IMPORTANT: The content MUST be about animals. This is for a YouTube channel called "PawPick" that creates adorable animal content.
+Each option must be an animal (e.g., kitten vs puppy, rabbit vs hamster, penguin vs otter).
+Compare the two animals based on their charming traits, cute behaviors, or fun facts.
 
 Return ONLY valid JSON in this exact format:
 {{
   "option_a": {{
-    "text": "Option A description (short, punchy)",
-    "image_prompt": "Detailed AI image generation prompt for option A"
+    "text": "Animal A with its charming trait (short, punchy, e.g., 'Fluffy baby kitten')",
+    "image_prompt": "Detailed AI image generation prompt for a cute, adorable depiction of animal A"
   }},
   "option_b": {{
-    "text": "Option B description (short, punchy)",
-    "image_prompt": "Detailed AI image generation prompt for option B"
+    "text": "Animal B with its charming trait (short, punchy, e.g., 'Smiley golden puppy')",
+    "image_prompt": "Detailed AI image generation prompt for a cute, adorable depiction of animal B"
   }},
-  "explanation": "Brief explanation or fun fact about both options",
-  "script": "Full narration script presenting both options and the explanation",
-  "image_prompts": ["prompt for option A", "prompt for option B"]
+  "explanation": "Fun comparison of the two animals - their cute habits, surprising abilities, or lovable quirks",
+  "script": "Full narration script presenting both animals, their adorable traits, and the fun comparison",
+  "image_prompts": ["prompt for cute animal A image", "prompt for cute animal B image"]
 }}
 
 The script must be narrated in {self.language}.
-Make the two options genuinely interesting and thought-provoking.
-Make image prompts detailed and vivid for AI image generation.
+Make the two animal options genuinely fun and heartwarming to compare.
+Make image prompts detailed and vivid, emphasizing cuteness and charm for AI image generation.
 """
         content = self.generate_response_json(prompt)
         success("Generated 'would you rather' content.")
         return content
 
     def _apply_color_tint(self, image_path: str, tint_rgb: tuple) -> str:
-        """이미지에 색상 틴트를 적용한 새 파일을 반환"""
+        """Apply a color tint to an image and return the new file path"""
         img = Image.open(image_path).convert("RGBA")
         overlay = Image.new("RGBA", img.size, (*tint_rgb, 80))
         tinted = Image.alpha_composite(img, overlay).convert("RGB")
@@ -71,7 +76,7 @@ Make image prompts detailed and vivid for AI image generation.
         video_size = (1080, 1920)
         half_height = video_size[1] // 2
 
-        # Option A 이미지 (상단, 빨간 틴트)
+        # Option A image (top half, red tint)
         if images and len(images) >= 1:
             tinted_a = self._apply_color_tint(images[0], (200, 50, 50))
             clip_a = (
@@ -96,7 +101,7 @@ Make image prompts detailed and vivid for AI image generation.
                 .with_position((0, 0))
             )
 
-        # Option B 이미지 (하단, 파란 틴트)
+        # Option B image (bottom half, blue tint)
         if images and len(images) >= 2:
             tinted_b = self._apply_color_tint(images[1], (50, 50, 200))
             clip_b = (
@@ -121,7 +126,7 @@ Make image prompts detailed and vivid for AI image generation.
                 .with_position((0, half_height))
             )
 
-        # Option A 텍스트 라벨
+        # Option A text label
         text_a = content.get("option_a", {}).get("text", "Option A")
         label_a = (
             TextClip(
@@ -139,7 +144,7 @@ Make image prompts detailed and vivid for AI image generation.
             .with_position(("center", half_height // 2 + 200))
         )
 
-        # Option B 텍스트 라벨
+        # Option B text label
         text_b = content.get("option_b", {}).get("text", "Option B")
         label_b = (
             TextClip(
@@ -157,7 +162,7 @@ Make image prompts detailed and vivid for AI image generation.
             .with_position(("center", half_height + half_height // 2 + 200))
         )
 
-        # 중앙 VS 배지
+        # Center VS badge
         vs_clip = (
             TextClip(
                 text="VS",
@@ -176,5 +181,11 @@ Make image prompts detailed and vivid for AI image generation.
             [clip_a, clip_b, label_a, label_b, vs_clip],
             size=video_size,
         ).with_duration(max_duration).with_fps(30)
+
+        # Add CTA frame
+        cta_img = images[-1] if images else None
+        cta_frame = self.generate_cta_frame(cta_img)
+        cta_clip = ImageClip(cta_frame).with_duration(3.0).with_fps(30)
+        video_clip = concatenate_videoclips([video_clip, cta_clip])
 
         return self._finalize_video(video_clip, tts_path, combined_path)

@@ -16,29 +16,33 @@ from moviepy import (
 @register_genre
 class FortuneGenre(BaseGenre):
     name = "fortune"
-    display_name = "운세 / 타로 / MBTI"
+    display_name = "My Animal Type"
     default_subtitle_style = "classic"
-    needs_images = False
+    needs_images = True
 
     def generate_content(self) -> dict:
-        prompt = f"""Generate a mystical tarot or fortune reading related to the topic: {self.niche}.
+        prompt = f"""Generate a fun "what animal type are you?" personality reading related to the topic: {self.niche}.
+The content MUST be about animals. Instead of tarot cards, each "card" is an animal type with personality traits.
 Return your answer as JSON with exactly this structure:
 {{
-  "theme": "Today's Tarot Reading",
+  "theme": "What Your Birth Month Says About Your Past-Life Animal",
   "cards": [
-    {{"name": "The Star", "meaning": "Hope and inspiration are guiding you..."}},
-    {{"name": "The Moon", "meaning": "Trust your intuition..."}}
+    {{"name": "Golden Retriever", "meaning": "You are a warm-hearted person who is loved by everyone..."}},
+    {{"name": "Cat", "meaning": "You are independent and confident..."}}
   ],
-  "reading": "Overall reading that ties all the cards together into a cohesive message",
-  "script": "Full narration: introduce the theme, reveal each card with its meaning, then deliver the overall reading"
+  "reading": "Overall reading that ties all the animal types together into a cohesive, fun personality message",
+  "script": "Full narration: introduce the theme, reveal each animal type with its personality traits, then deliver the overall reading",
+  "image_prompts": ["Adorable golden retriever portrait, warm and friendly expression, soft lighting, 9:16 portrait...", "Cute cat with confident pose, elegant atmosphere, 9:16 portrait..."]
 }}
 
 Requirements:
-- Generate 2-4 tarot cards with meaningful interpretations
+- Generate 2-4 animal types, each representing a personality type
+- The content MUST be about animals — each card's "name" should be an animal name, "meaning" should describe personality traits of people who match that animal
 - Write everything in {self.language}
-- The theme can be tarot, horoscope, fortune cookie, or MBTI-style reading
-- Make it feel mystical and personal
-- The reading should be encouraging and insightful
+- The theme should be fun animal-personality content like "What Your Birth Month Says About Your Spirit Animal", "Your Blood Type Animal Match", "Your MBTI Animal Type" etc.
+- Make it feel fun, relatable and shareable
+- The reading should be playful and positive
+- image_prompts: one prompt per animal type, each describing an adorable, expressive animal portrait. Cute, warm colors, soft lighting, 9:16 portrait.
 - Return ONLY valid JSON, no markdown"""
 
         return self.generate_response_json(prompt)
@@ -50,40 +54,58 @@ Requirements:
         tts_clip = AudioFileClip(tts_path)
         total_duration = tts_clip.duration
 
-        theme = content.get("theme", "Today's Reading")
+        theme = content.get("theme", "Today's Animal Type")
         cards = content.get("cards", [])
         reading = content.get("reading", "")
 
-        # 인트로 프레임
-        intro_frame = self.generate_text_frame(
-            texts=[theme],
-            colors=["#E8D5F5"],
-            bg_color="#1a0a2e",
-            font_sizes=[56],
-        )
+        # Intro frame
+        if images:
+            intro_frame = self.generate_text_on_image_frame(
+                images[0], texts=[theme], colors=["#E8D5F5"], font_sizes=[56],
+            )
+        else:
+            intro_frame = self.generate_text_frame(
+                texts=[theme], colors=["#E8D5F5"], bg_color="#1a0a2e", font_sizes=[56],
+            )
 
-        # 카드 프레임들
+        # Card frames
         card_frames = []
-        for card in cards:
+        for idx, card in enumerate(cards):
             card_name = card.get("name", "")
             card_meaning = card.get("meaning", "")
-            frame = self.generate_text_frame(
-                texts=[card_name, "", card_meaning],
-                colors=["#FFD700", "#FFFFFF", "#D4B8E8"],
-                bg_color="#1a0a2e",
-                font_sizes=[52, 20, 38],
-            )
+            img = images[idx] if images and idx < len(images) else None
+            if img:
+                frame = self.generate_text_on_image_frame(
+                    img, texts=[card_name, "", card_meaning],
+                    colors=["#FFD700", "#FFFFFF", "#D4B8E8"],
+                    font_sizes=[52, 20, 38],
+                )
+            else:
+                frame = self.generate_text_frame(
+                    texts=[card_name, "", card_meaning],
+                    colors=["#FFD700", "#FFFFFF", "#D4B8E8"],
+                    bg_color="#1a0a2e",
+                    font_sizes=[52, 20, 38],
+                )
             card_frames.append(frame)
 
-        # 종합 리딩 프레임
-        reading_frame = self.generate_text_frame(
-            texts=["Overall Reading", "", reading],
-            colors=["#FFD700", "#FFFFFF", "#E8D5F5"],
-            bg_color="#1a0a2e",
-            font_sizes=[48, 20, 40],
-        )
+        # Overall reading frame
+        last_img = images[-1] if images else None
+        if last_img:
+            reading_frame = self.generate_text_on_image_frame(
+                last_img, texts=["Your Result", "", reading],
+                colors=["#FFD700", "#FFFFFF", "#E8D5F5"],
+                font_sizes=[48, 20, 40],
+            )
+        else:
+            reading_frame = self.generate_text_frame(
+                texts=["Your Result", "", reading],
+                colors=["#FFD700", "#FFFFFF", "#E8D5F5"],
+                bg_color="#1a0a2e",
+                font_sizes=[48, 20, 40],
+            )
 
-        # 타이밍 배분
+        # Timing allocation
         intro_dur = 3.0
         card_dur = 4.0
         fixed_total = intro_dur + (card_dur * len(card_frames))
@@ -104,6 +126,10 @@ Requirements:
         clips.append(
             ImageClip(reading_frame).with_duration(reading_dur).with_fps(30)
         )
+
+        cta_img = images[-1] if images else None
+        cta_frame = self.generate_cta_frame(cta_img)
+        clips.append(ImageClip(cta_frame).with_duration(3.0).with_fps(30))
 
         video = concatenate_videoclips(clips)
 

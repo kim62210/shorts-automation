@@ -16,26 +16,30 @@ from moviepy import (
 @register_genre
 class TwoTruthsGenre(BaseGenre):
     name = "two_truths"
-    display_name = "두 개의 진실, 하나의 거짓"
+    display_name = "Animal Facts: True or False"
     default_subtitle_style = "bold_center"
-    needs_images = False
+    needs_images = True
 
     def generate_content(self) -> dict:
-        prompt = f"""Generate a "Two Truths and a Lie" challenge about the topic: {self.niche}.
+        prompt = f"""Generate a "Two Truths and a Lie" challenge about animals, related to the topic: {self.niche}.
+The content MUST be about animals — surprising and fun animal facts where one is false.
 Return your answer as JSON with exactly this structure:
 {{
-  "statements": ["Statement 1 (true or false)", "Statement 2 (true or false)", "Statement 3 (true or false)"],
+  "statements": ["Animal fact 1 (true or false)", "Animal fact 2 (true or false)", "Animal fact 3 (true or false)"],
   "lie_index": 1,
   "explanation": "Why the lie is false and what the truth actually is",
-  "script": "Full narration: present the three statements, ask which is the lie, reveal the answer, and explain"
+  "script": "Full narration: present the three animal facts, ask which is false, reveal the answer, and explain",
+  "image_prompts": ["A vivid, eye-catching image of cute animals related to the facts. Photorealistic, adorable, 9:16 portrait orientation."]
 }}
 
 Requirements:
+- All three statements MUST be about animals (animal abilities, behaviors, biology, fun facts)
 - Two statements must be true and one must be a believable lie
 - Write everything in {self.language}
 - lie_index is 0-based (0, 1, or 2)
-- The statements should be surprising and interesting facts
+- The statements should be surprising and fascinating animal facts that make viewers go "really?!"
 - The lie should be plausible enough to fool people
+- image_prompts: exactly 1 prompt for a cute/interesting animal background image
 - Return ONLY valid JSON, no markdown"""
 
         return self.generate_response_json(prompt)
@@ -51,7 +55,15 @@ Requirements:
         lie_index = content.get("lie_index", 0)
         explanation = content.get("explanation", "")
 
-        # 1) 3개 문장 제시 프레임 (모두 흰색)
+        bg_img = images[0] if images else None
+        _frame = self.generate_text_on_image_frame if bg_img else self.generate_text_frame
+
+        def make_frame(texts, colors, font_sizes):
+            if bg_img:
+                return _frame(bg_img, texts=texts, colors=colors, font_sizes=font_sizes)
+            return _frame(texts=texts, colors=colors, bg_color="#0a0a2e", font_sizes=font_sizes)
+
+        # 1) Statements presentation frame
         statement_texts = []
         statement_colors = []
         statement_font_sizes = []
@@ -60,22 +72,20 @@ Requirements:
             statement_colors.append("#FFFFFF")
             statement_font_sizes.append(44)
 
-        statements_frame = self.generate_text_frame(
-            texts=["Two Truths, One Lie", ""] + statement_texts,
-            colors=["#FFD700", "#FFFFFF"] + statement_colors,
-            bg_color="#0a0a2e",
-            font_sizes=[52, 20] + statement_font_sizes,
+        statements_frame = make_frame(
+            ["True or False? Animal Facts", ""] + statement_texts,
+            ["#FFFF00", "#FFFFFF"] + statement_colors,
+            [52, 20] + statement_font_sizes,
         )
 
-        # 2) 카운트다운 프레임
-        thinking_frame = self.generate_text_frame(
-            texts=["Which one is the LIE?", "..."],
-            colors=["#FFD700", "#AAAAAA"],
-            bg_color="#0a0a2e",
-            font_sizes=[48, 60],
+        # 2) Thinking / countdown frame
+        thinking_frame = make_frame(
+            ["Which one is the LIE?", "..."],
+            ["#FFFF00", "#AAAAAA"],
+            [48, 60],
         )
 
-        # 3) 거짓 공개 프레임 (거짓 문장만 빨간색)
+        # 3) Lie reveal frame
         reveal_texts = []
         reveal_colors = []
         reveal_font_sizes = []
@@ -89,14 +99,13 @@ Requirements:
             reveal_texts.append(label)
             reveal_font_sizes.append(44)
 
-        reveal_frame = self.generate_text_frame(
-            texts=["The Lie Is...", ""] + reveal_texts + ["", explanation],
-            colors=["#FFD700", "#FFFFFF"] + reveal_colors + ["#FFFFFF", "#CCCCCC"],
-            bg_color="#0a0a2e",
-            font_sizes=[52, 20] + reveal_font_sizes + [20, 36],
+        reveal_frame = make_frame(
+            ["The Lie Is...", ""] + reveal_texts + ["", explanation],
+            ["#FFFF00", "#FFFFFF"] + reveal_colors + ["#FFFFFF", "#CCCCCC"],
+            [52, 20] + reveal_font_sizes + [20, 36],
         )
 
-        # 타이밍 배분
+        # Timing allocation
         statements_dur = 5.0
         thinking_dur = 3.0
         fixed_total = statements_dur + thinking_dur
@@ -111,6 +120,10 @@ Requirements:
             ImageClip(thinking_frame).with_duration(thinking_dur).with_fps(30),
             ImageClip(reveal_frame).with_duration(reveal_dur).with_fps(30),
         ]
+
+        # CTA frame (3 seconds)
+        cta_frame = self.generate_cta_frame(bg_img)
+        clips.append(ImageClip(cta_frame).with_duration(3.0).with_fps(30))
 
         video = concatenate_videoclips(clips)
 

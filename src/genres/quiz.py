@@ -16,26 +16,31 @@ from moviepy import (
 @register_genre
 class QuizGenre(BaseGenre):
     name = "quiz"
-    display_name = "퀴즈 / 트리비아"
+    display_name = "Animal Trivia Quiz"
     default_subtitle_style = "bold_center"
-    needs_images = False
+    needs_images = True
 
     def generate_content(self) -> dict:
-        prompt = f"""Generate a fun trivia quiz question about the topic: {self.niche}.
+        prompt = f"""Generate a fun and surprising animal trivia quiz question. The niche is: {self.niche}, but the question MUST be about animals.
+The question should be about fascinating, surprising, or little-known animal facts that make people go "wow!"
+Examples of good topics: animal superpowers, weird animal behaviors, animal body facts, animal records, etc.
+
 Return your answer as JSON with exactly this structure:
 {{
-  "question": "The trivia question",
+  "question": "The animal trivia question",
   "options": ["A) option1", "B) option2", "C) option3", "D) option4"],
   "answer_index": 1,
-  "explanation": "Why this is the correct answer",
-  "script": "Full narration script that reads the question, pauses for thinking, reveals the answer, and explains why. Format: The question is... The options are... Think about it... The correct answer is... Because..."
+  "explanation": "Why this is the correct answer - include a fun animal fact",
+  "script": "Full narration script that reads the question, pauses for thinking, reveals the answer, and explains why with an interesting animal fact.",
+  "image_prompts": ["A cute, vivid image of the animal featured in the quiz. Photorealistic style, 9:16 portrait orientation, warm lighting, adorable pose."]
 }}
 
 Requirements:
-- The question should be interesting and engaging for a {self.niche} audience
+- The question MUST be about animals - surprising or fun animal facts
 - Write everything in {self.language}
 - The script field must contain the complete narration covering question, options, answer reveal, and explanation
 - answer_index is 0-based (0=A, 1=B, 2=C, 3=D)
+- image_prompts: exactly 1 prompt for a cute animal background image related to the quiz topic
 - Return ONLY valid JSON, no markdown"""
 
         return self.generate_response_json(prompt)
@@ -52,29 +57,27 @@ Requirements:
         answer_index = content.get("answer_index", 0)
         explanation = content.get("explanation", "")
 
-        # 1) 질문 + 선택지 프레임
-        question_texts = [question, ""] + options
-        question_colors = ["#FFD700"] + ["#FFFFFF"] * (len(options) + 1)
-        question_font_sizes = [52] + [40] * (len(options) + 1)
-        question_frame = self.generate_text_frame(
-            texts=question_texts,
-            colors=question_colors,
-            bg_color="#0a0a2e",
-            font_sizes=question_font_sizes,
-        )
+        bg_img = images[0] if images else None
+        _frame = self.generate_text_on_image_frame if bg_img else self.generate_text_frame
 
-        # 2) 카운트다운 프레임 (3, 2, 1)
+        def make_frame(texts, colors, font_sizes):
+            if bg_img:
+                return _frame(bg_img, texts=texts, colors=colors, font_sizes=font_sizes)
+            return _frame(texts=texts, colors=colors, bg_color="#0a0a2e", font_sizes=font_sizes)
+
+        # 1) Question + options frame
+        question_texts = [question, ""] + options
+        question_colors = ["#FFFF00"] + ["#FFFFFF"] * (len(options) + 1)
+        question_font_sizes = [52] + [40] * (len(options) + 1)
+        question_frame = make_frame(question_texts, question_colors, question_font_sizes)
+
+        # 2) Countdown frames (3, 2, 1)
         countdown_frames = []
         for n in [3, 2, 1]:
-            frame = self.generate_text_frame(
-                texts=["Think...", str(n)],
-                colors=["#AAAAAA", "#FFD700"],
-                bg_color="#0a0a2e",
-                font_sizes=[48, 120],
-            )
+            frame = make_frame(["Think...", str(n)], ["#AAAAAA", "#FFFF00"], [48, 120])
             countdown_frames.append(frame)
 
-        # 3) 정답 공개 프레임
+        # 3) Answer reveal frame
         answer_texts = []
         answer_colors = []
         for idx, opt in enumerate(options):
@@ -83,22 +86,20 @@ Requirements:
                 answer_colors.append("#00FF88")
             else:
                 answer_colors.append("#555555")
-        answer_frame = self.generate_text_frame(
-            texts=["Answer:"] + answer_texts,
-            colors=["#FFD700"] + answer_colors,
-            bg_color="#0a0a2e",
-            font_sizes=[52] + [48] * len(options),
+        answer_frame = make_frame(
+            ["Answer:"] + answer_texts,
+            ["#FFFF00"] + answer_colors,
+            [52] + [48] * len(options),
         )
 
-        # 4) 해설 프레임
-        explanation_frame = self.generate_text_frame(
-            texts=["Why?", "", explanation],
-            colors=["#FFD700", "#FFFFFF", "#CCCCCC"],
-            bg_color="#0a0a2e",
-            font_sizes=[52, 40, 40],
+        # 4) Explanation frame
+        explanation_frame = make_frame(
+            ["Why?", "", explanation],
+            ["#FFFF00", "#FFFFFF", "#CCCCCC"],
+            [52, 40, 40],
         )
 
-        # 프레임 타이밍 배분
+        # Frame timing distribution
         countdown_total = 3.0
         remaining = total_duration - countdown_total
         question_dur = remaining * 0.35
@@ -119,6 +120,10 @@ Requirements:
         clips.append(
             ImageClip(explanation_frame).with_duration(explanation_dur).with_fps(30)
         )
+
+        # CTA frame (3 seconds)
+        cta_frame = self.generate_cta_frame(bg_img)
+        clips.append(ImageClip(cta_frame).with_duration(3.0).with_fps(30))
 
         video = concatenate_videoclips(clips)
 

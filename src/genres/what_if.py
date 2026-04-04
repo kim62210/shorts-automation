@@ -17,30 +17,38 @@ from moviepy import (
 @register_genre
 class WhatIfGenre(BaseGenre):
     name = "what_if"
-    display_name = "What If (만약에)"
+    display_name = "Animal What If"
     default_effect = "ken_burns"
     default_subtitle_style = "classic"
     needs_images = True
 
     def generate_content(self) -> dict:
-        prompt = f"""Generate a "What If" hypothetical scenario video script about the topic: {self.niche}.
+        prompt = f"""Generate an animal-themed "What If" hypothetical scenario video script about the topic: {self.niche}.
+
+IMPORTANT: The content MUST be about animals. This is for a cute animal YouTube channel called "PawPick".
+Examples of good scenarios:
+- "What if cats were smarter than humans?"
+- "What if animals could talk?"
+- "What if dinosaurs were still alive?"
+- "What if dogs ruled the world?"
+- "What if animals went to school?"
 
 Return ONLY valid JSON in this exact format:
 {{
-  "scenario": "What if ... ? (a fascinating hypothetical question)",
+  "scenario": "What if ... ? (a fun hypothetical question about animals)",
   "explanations": [
-    {{"point": "First consequence or explanation", "image_prompt": "Detailed AI image generation prompt"}},
-    {{"point": "Second consequence or explanation", "image_prompt": "Detailed AI image generation prompt"}},
-    {{"point": "Third consequence or explanation", "image_prompt": "Detailed AI image generation prompt"}}
+    {{"point": "First consequence or explanation about the animal scenario", "image_prompt": "Detailed AI image generation prompt featuring animals in an imaginative scene"}},
+    {{"point": "Second consequence or explanation about the animal scenario", "image_prompt": "Detailed AI image generation prompt featuring animals in an imaginative scene"}},
+    {{"point": "Third consequence or explanation about the animal scenario", "image_prompt": "Detailed AI image generation prompt featuring animals in an imaginative scene"}}
   ],
-  "script": "Full narration script exploring the scenario and its consequences",
-  "image_prompts": ["prompt 1", "prompt 2", "prompt 3"]
+  "script": "Full narration script exploring the animal scenario and its fun consequences",
+  "image_prompts": ["animal scene prompt 1", "animal scene prompt 2", "animal scene prompt 3"]
 }}
 
 The script must be narrated in {self.language}.
-Make the scenario thought-provoking and scientifically interesting.
+Make the scenario fun, imaginative, and always centered around animals.
 Provide 3-5 explanation points.
-Make image prompts detailed and vivid for AI image generation.
+Make image prompts detailed and vivid, always featuring cute or imaginative animal scenes.
 """
         content = self.generate_response_json(prompt)
         success(f"Generated what-if content: {content.get('scenario', '')[:60]}...")
@@ -54,10 +62,10 @@ Make image prompts detailed and vivid for AI image generation.
         max_duration = tts_clip.duration
 
         video_size = (1080, 1920)
-        scenario = content.get("scenario", "What if...?")
+        scenario = content.get("scenario", "WHAT IF...?")
         explanations = content.get("explanations", [])
 
-        # 인트로: "WHAT IF...?" + 시나리오 질문 프레임
+        # Intro: "WHAT IF...?" + scenario question frame
         intro_frame = self.generate_text_frame(
             texts=["WHAT IF...?", scenario[:80]],
             colors=["#FF6B35", "#FFFFFF"],
@@ -66,7 +74,7 @@ Make image prompts detailed and vivid for AI image generation.
         )
         intro_clip = ImageClip(intro_frame).with_duration(3).with_fps(30)
 
-        # 각 설명 포인트 클립 생성
+        # Generate clips for each explanation point
         point_clips = []
         remaining_duration = max_duration - 3
         per_point_duration = remaining_duration / max(len(explanations), 1)
@@ -98,6 +106,12 @@ Make image prompts detailed and vivid for AI image generation.
             point_clips.append(bg_clip)
 
         all_clips = [intro_clip] + point_clips
+
+        # Add CTA (Call-To-Action) frame
+        cta_img = images[-1] if images else None
+        cta_frame = self.generate_cta_frame(cta_img)
+        all_clips.append(ImageClip(cta_frame).with_duration(3.0).with_fps(30))
+
         video_clip = concatenate_videoclips(all_clips)
         video_clip = video_clip.with_duration(max_duration).with_fps(30)
 

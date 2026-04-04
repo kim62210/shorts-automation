@@ -21,29 +21,38 @@ from moviepy import (
 @register_genre
 class StepTutorialGenre(BaseGenre):
     name = "step_tutorial"
-    display_name = "스텝 튜토리얼"
+    display_name = "Animal Facts Guide"
     default_effect = "slideshow"
     default_subtitle_style = "modern_box"
     needs_images = True
 
     def generate_content(self) -> dict:
-        prompt = f"""Generate a step-by-step tutorial video script about the topic: {self.niche}.
+        prompt = f"""Generate an animal-themed step-by-step knowledge/tips video script about the topic: {self.niche}.
+
+IMPORTANT: The content MUST be about animals. This is for a cute animal YouTube channel called "PawPick".
+Instead of generic tutorials, generate fun animal knowledge or tips in step format.
+Examples of good titles:
+- "3 Steps to Read Your Dog's Mood from Their Expression"
+- "3 Steps to Befriend a Cat"
+- "3 Steps to Take Great Animal Photos at the Zoo"
+- "3 Steps to Tell If Your Hamster Is Happy"
+- "3 Steps to Safely Bond with a Stray Cat"
 
 Return ONLY valid JSON in this exact format:
 {{
-  "title": "3 Steps to ...",
+  "title": "Animal topic in N steps",
   "steps": [
-    {{"number": 1, "title": "Step title", "description": "Step description", "image_prompt": "Detailed AI image generation prompt"}},
-    {{"number": 2, "title": "Step title", "description": "Step description", "image_prompt": "Detailed AI image generation prompt"}},
-    {{"number": 3, "title": "Step title", "description": "Step description", "image_prompt": "Detailed AI image generation prompt"}}
+    {{"number": 1, "title": "Step title about animals", "description": "Step description about animals", "image_prompt": "Detailed AI image generation prompt featuring cute animals"}},
+    {{"number": 2, "title": "Step title about animals", "description": "Step description about animals", "image_prompt": "Detailed AI image generation prompt featuring cute animals"}},
+    {{"number": 3, "title": "Step title about animals", "description": "Step description about animals", "image_prompt": "Detailed AI image generation prompt featuring cute animals"}}
   ],
-  "script": "Full narration script covering all steps",
-  "image_prompts": ["prompt for step 1", "prompt for step 2", "prompt for step 3"]
+  "script": "Full narration script covering all steps about animal knowledge",
+  "image_prompts": ["animal scene prompt for step 1", "animal scene prompt for step 2", "animal scene prompt for step 3"]
 }}
 
 The script must be narrated in {self.language}.
 Keep to 3-5 steps maximum.
-Make image prompts detailed and vivid for AI image generation.
+Make image prompts detailed and vivid, always featuring cute or interesting animal scenes.
 """
         content = self.generate_response_json(prompt)
         success(f"Generated step tutorial content: {content.get('title', '')}")
@@ -51,7 +60,7 @@ Make image prompts detailed and vivid for AI image generation.
 
     def _generate_progress_bar(self, current_step: int, total_steps: int,
                                size: tuple = (1080, 60)) -> str:
-        """현재 단계 / 전체 단계를 나타내는 진행 바 이미지 생성"""
+        """Generate a progress bar image showing current step / total steps."""
         img = Image.new("RGBA", size, (0, 0, 0, 160))
         draw = ImageDraw.Draw(img)
 
@@ -60,14 +69,14 @@ Make image prompts detailed and vivid for AI image generation.
         bar_y = (size[1] - bar_height) // 2
         bar_width = size[0] - padding * 2
 
-        # 배경 바
+        # Background bar
         draw.rounded_rectangle(
             [padding, bar_y, padding + bar_width, bar_y + bar_height],
             radius=6,
             fill=(80, 80, 80, 200),
         )
 
-        # 진행 바
+        # Progress bar
         fill_width = int(bar_width * (current_step / total_steps))
         if fill_width > 0:
             draw.rounded_rectangle(
@@ -76,7 +85,7 @@ Make image prompts detailed and vivid for AI image generation.
                 fill=(78, 205, 196, 255),
             )
 
-        # 단계 점(dot) 표시
+        # Step dot indicators
         for i in range(total_steps):
             dot_x = padding + int(bar_width * ((i + 0.5) / total_steps))
             dot_radius = 8
@@ -103,10 +112,10 @@ Make image prompts detailed and vivid for AI image generation.
 
         video_size = (1080, 1920)
         steps = content.get("steps", [])
-        title = content.get("title", "Tutorial")
+        title = content.get("title", "Guide")
         total_steps = len(steps)
 
-        # 인트로 프레임
+        # Intro frame
         intro_frame = self.generate_text_frame(
             texts=[title],
             colors=["#4ECDC4"],
@@ -115,7 +124,7 @@ Make image prompts detailed and vivid for AI image generation.
         )
         intro_clip = ImageClip(intro_frame).with_duration(3).with_fps(30)
 
-        # 각 단계 클립 생성
+        # Generate clips for each step
         step_clips = []
         remaining_duration = max_duration - 3
         per_step_duration = remaining_duration / max(total_steps, 1)
@@ -126,7 +135,7 @@ Make image prompts detailed and vivid for AI image generation.
             step_number = step.get("number", idx + 1)
             step_title = step.get("title", f"Step {step_number}")
 
-            # 배경 이미지
+            # Background image
             if images and idx < len(images):
                 if effect:
                     bg_clip = effect.apply([images[idx]], per_step_duration)
@@ -139,7 +148,7 @@ Make image prompts detailed and vivid for AI image generation.
                     )
             else:
                 fallback = self.generate_text_frame(
-                    texts=[f"Step {step_number}", step_title],
+                    texts=[f"STEP {step_number}", step_title],
                     colors=["#4ECDC4", "#FFFFFF"],
                     bg_color="#0a0a1a",
                     font_sizes=[80, 40],
@@ -148,7 +157,7 @@ Make image prompts detailed and vivid for AI image generation.
 
             bg_clip = bg_clip.with_duration(per_step_duration).with_fps(30)
 
-            # 순위 번호 배지 오버레이
+            # Step number badge overlay
             badge_frame = self.generate_text_frame(
                 texts=[f"STEP {step_number}"],
                 colors=["#4ECDC4"],
@@ -162,7 +171,7 @@ Make image prompts detailed and vivid for AI image generation.
                 .with_position(("center", 80))
             )
 
-            # 단계 제목 오버레이
+            # Step title overlay
             title_clip = (
                 TextClip(
                     text=step_title,
@@ -179,7 +188,7 @@ Make image prompts detailed and vivid for AI image generation.
                 .with_position(("center", 200))
             )
 
-            # 하단 진행 바
+            # Bottom progress bar
             progress_path = self._generate_progress_bar(
                 idx + 1, total_steps, size=(video_size[0], 60)
             )
@@ -198,6 +207,12 @@ Make image prompts detailed and vivid for AI image generation.
             step_clips.append(step_comp)
 
         all_clips = [intro_clip] + step_clips
+
+        # Add CTA (Call-To-Action) frame
+        cta_img = images[-1] if images else None
+        cta_frame = self.generate_cta_frame(cta_img)
+        all_clips.append(ImageClip(cta_frame).with_duration(3.0).with_fps(30))
+
         video_clip = concatenate_videoclips(all_clips)
         video_clip = video_clip.with_duration(max_duration).with_fps(30)
 
